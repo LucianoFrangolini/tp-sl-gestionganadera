@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getDb } from "@/lib/mongodb"
 
 /**
  * GET /api/zones
@@ -6,31 +7,8 @@ import { NextResponse } from "next/server"
  */
 export async function GET() {
   try {
-    // Simulación de datos de zonas
-    const zones = [
-      {
-        id: "farm",
-        name: "Granja Completa",
-        description: "Perímetro completo de la granja",
-        bounds: [
-          [40.7028, -74.016],
-          [40.7228, -73.996],
-        ],
-        color: "#3b82f6",
-      },
-      {
-        id: "stables",
-        name: "Establos",
-        description: "Área de descanso para el ganado",
-        bounds: [
-          [40.7048, -74.014],
-          [40.7088, -74.01],
-        ],
-        color: "#ef4444",
-      },
-      // Otras zonas se agregarían aquí
-    ]
-
+    const db = await getDb()
+    const zones = await db.collection("zones").find().toArray()
     return NextResponse.json(
       {
         success: true,

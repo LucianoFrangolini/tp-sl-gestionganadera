@@ -1,8 +1,9 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 import { useToast } from "@/hooks/use-toast"
-import { generateMockCattle, generateMockZones } from "@/lib/mock-data"
+// Quitar imports de mocks
+// import { generateMockZones, generateMockCattle } from "@/lib/mock-data"
 import { useAuth } from "@/lib/auth-context"
 
 export interface Cattle {
@@ -36,7 +37,7 @@ interface CattleContextType {
 
 const CattleContext = createContext<CattleContextType | undefined>(undefined)
 
-export function CattleProvider({ children }: { children: ReactNode }) {
+export function CattleProvider({ children }: { children: React.ReactNode }) {
   const [cattle, setCattle] = useState<Cattle[]>([])
   const [zones, setZones] = useState<Zone[]>([])
   const [loading, setLoading] = useState(true)
@@ -47,17 +48,29 @@ export function CattleProvider({ children }: { children: ReactNode }) {
 
   // Inicializar datos solo si el usuario está autenticado
   useEffect(() => {
-    if (!isAuthenticated) {
-      // No inicializar datos si no hay usuario autenticado
-      return
+    if (!isAuthenticated) return
+
+    async function loadData() {
+      setLoading(true)
+      try {
+        const [zonesRes, cattleRes] = await Promise.all([
+          fetch("/api/zones").then((r) => r.json()),
+          fetch("/api/cattle").then((r) => r.json()),
+        ])
+        setZones(zonesRes.data)
+        setCattle(cattleRes.data)
+      } catch (e) {
+        toast({
+          title: "Error cargando datos",
+          description: String(e),
+          variant: "destructive",
+        })
+      } finally {
+        setLoading(false)
+      }
     }
 
-    const mockZones = generateMockZones()
-    const mockCattle = generateMockCattle(mockZones)
-
-    setZones(mockZones)
-    setCattle(mockCattle)
-    setLoading(false)
+    loadData()
 
     // Reproducir sonido de bienvenida
     const audio = new Audio("/moo.mp3")

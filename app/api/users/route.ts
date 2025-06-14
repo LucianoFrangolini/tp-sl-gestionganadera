@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
+import { getDb } from "@/lib/mongodb"
 
 /**
  * GET /api/users
@@ -7,62 +8,39 @@ import type { NextRequest } from "next/server"
  */
 export async function GET(request: NextRequest) {
   try {
-    // Obtener parámetros de búsqueda de la URL
+    const db = await getDb()
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get("search") || ""
     const page = Number.parseInt(searchParams.get("page") || "1")
     const limit = Number.parseInt(searchParams.get("limit") || "10")
 
-    // Simulación de datos de usuarios
-    const users = [
-      {
-        id: "1",
-        name: "Administrador",
-        email: "admin@ejemplo.com",
-        role: "Administrador",
-        createdAt: "2023-01-15",
-      },
-      {
-        id: "2",
-        name: "Juan Pérez",
-        email: "juan@ejemplo.com",
-        role: "Supervisor",
-        createdAt: "2023-02-20",
-      },
-      {
-        id: "3",
-        name: "María López",
-        email: "maria@ejemplo.com",
-        role: "Operador",
-        createdAt: "2023-03-10",
-      },
-      // Otros usuarios se agregarían aquí
-    ]
+    const query: any = {}
+    if (search) {
+      const safeRegex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+      query.$or = [
+        { name: safeRegex },
+        { email: safeRegex },
+        { role: safeRegex },
+      ]
+    }
 
-    // Filtrar por término de búsqueda si existe
-    const filteredUsers = search
-      ? users.filter(
-          (user) =>
-            user.name.toLowerCase().includes(search.toLowerCase()) ||
-            user.email.toLowerCase().includes(search.toLowerCase()) ||
-            user.role.toLowerCase().includes(search.toLowerCase()),
-        )
-      : users
-
-    // Paginación simple
-    const startIndex = (page - 1) * limit
-    const endIndex = page * limit
-    const paginatedUsers = filteredUsers.slice(startIndex, endIndex)
+    const usersCollection = db.collection("users")
+    const total = await usersCollection.countDocuments(query)
+    const users = await usersCollection
+      .find(query)
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .toArray()
 
     return NextResponse.json(
       {
         success: true,
-        data: paginatedUsers,
+        data: users,
         pagination: {
-          total: filteredUsers.length,
+          total,
           page,
           limit,
-          pages: Math.ceil(filteredUsers.length / limit),
+          pages: Math.ceil(total / limit),
         },
       },
       { status: 200 },
@@ -85,46 +63,49 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Obtener datos del cuerpo de la solicitud
+    const db = await getDb()
     const body = await request.json()
     const { name, email, password } = body
 
-    // Validar campos requeridos
     if (!name || !email || !password) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Todos los campos son obligatorios",
-        },
+        { success: false, error: "Todos los campos son obligatorios" },
         { status: 400 },
       )
     }
 
-    // Validar formato de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "El formato del email no es válido",
-        },
+        { success: false, error: "El formato del email no es válido" },
         { status: 400 },
       )
     }
 
-    // Simulación de creación de usuario
+    // Verificar si el usuario ya existe
+    const usersCollection = db.collection("users")
+    const existing = await usersCollection.findOne({ email })
+    if (existing) {
+      return NextResponse.json(
+        { success: false, error: "El usuario ya existe" },
+        { status: 400 },
+      )
+    }
+
     const newUser = {
-      id: Date.now().toString(),
       name,
       email,
-      role: "Operador", // Rol por defecto
+      password, // En producción deberías hashear la contraseña
+      role: "Operador",
       createdAt: new Date().toISOString().split("T")[0],
     }
+
+    const result = await usersCollection.insertOne(newUser)
 
     return NextResponse.json(
       {
         success: true,
-        data: newUser,
+        data: { ...newUser, id: result.insertedId },
         message: "Usuario creado correctamente",
       },
       { status: 201 },

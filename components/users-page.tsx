@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronLeft, ChevronRight, MoreHorizontal, Search, Trash, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -27,45 +27,6 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 
-// Datos de ejemplo para usuarios
-const mockUsers = [
-  {
-    id: "1",
-    name: "Administrador",
-    email: "admin@ejemplo.com",
-    role: "Administrador",
-    createdAt: "2023-01-15",
-  },
-  {
-    id: "2",
-    name: "Juan Pérez",
-    email: "juan@ejemplo.com",
-    role: "Supervisor",
-    createdAt: "2023-02-20",
-  },
-  {
-    id: "3",
-    name: "María López",
-    email: "maria@ejemplo.com",
-    role: "Operador",
-    createdAt: "2023-03-10",
-  },
-  {
-    id: "4",
-    name: "Carlos Rodríguez",
-    email: "carlos@ejemplo.com",
-    role: "Operador",
-    createdAt: "2023-04-05",
-  },
-  {
-    id: "5",
-    name: "Ana Martínez",
-    email: "ana@ejemplo.com",
-    role: "Supervisor",
-    createdAt: "2023-05-12",
-  },
-]
-
 export default function UsersPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -76,18 +37,48 @@ export default function UsersPage() {
     email: "",
     password: "",
   })
-  const [users, setUsers] = useState(mockUsers)
+  const [users, setUsers] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+
+  // Cargar usuarios desde la API
+  const loadUsers = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/users")
+      const data = await res.json()
+      // Mapear _id a id para el frontend
+      setUsers(
+        (data.data || []).map((user: any) => ({
+          ...user,
+          id: user._id || user.id,
+        }))
+      )
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los usuarios",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadUsers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Filtrar usuarios por término de búsqueda
   const filteredUsers = users.filter(
     (user) =>
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.role.toLowerCase().includes(searchTerm.toLowerCase()),
+      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.role?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
-  const handleCreateUser = () => {
-    // Validar campos
+  // Crear usuario usando la API
+  const handleCreateUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.password) {
       toast({
         title: "Error",
@@ -97,7 +88,6 @@ export default function UsersPage() {
       return
     }
 
-    // Validar formato de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(newUser.email)) {
       toast({
@@ -108,41 +98,66 @@ export default function UsersPage() {
       return
     }
 
-    // Crear nuevo usuario
-    const newId = (users.length + 1).toString()
-    const today = new Date().toISOString().split("T")[0]
-
-    setUsers([
-      ...users,
-      {
-        id: newId,
-        name: newUser.name,
-        email: newUser.email,
-        role: "Operador", // Rol por defecto
-        createdAt: today,
-      },
-    ])
-
-    // Limpiar formulario y cerrar diálogo
-    setNewUser({
-      name: "",
-      email: "",
-      password: "",
-    })
-    setIsCreateDialogOpen(false)
-
-    // Mostrar notificación
-    toast({
-      title: "Usuario creado",
-      description: `Se ha creado el usuario ${newUser.name} correctamente`,
-    })
+    try {
+      setLoading(true)
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUser),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "Error al crear usuario")
+      }
+      toast({
+        title: "Usuario creado",
+        description: `Se ha creado el usuario ${newUser.name} correctamente`,
+      })
+      setIsCreateDialogOpen(false)
+      setNewUser({ name: "", email: "", password: "" })
+      await loadUsers()
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e.message || "No se pudo crear el usuario",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleDeleteUser = (id: string) => {
+  // Eliminar usuario (requiere endpoint DELETE en la API para ser real)
+  const handleDeleteUser = async (id: string) => {
+    // Si tienes un endpoint DELETE, descomenta y usa esto:
+    /*
+    try {
+      setLoading(true)
+      const res = await fetch(`/api/users/${id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Error al eliminar usuario")
+      }
+      toast({
+        title: "Usuario eliminado",
+        description: "El usuario ha sido eliminado correctamente",
+      })
+      await loadUsers()
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e.message || "No se pudo eliminar el usuario",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+    */
+    // Si NO tienes endpoint DELETE, solo filtra localmente:
     setUsers(users.filter((user) => user.id !== id))
     toast({
       title: "Usuario eliminado",
-      description: "El usuario ha sido eliminado correctamente",
+      description: "El usuario ha sido eliminado localmente (solo frontend)",
     })
   }
 
@@ -186,6 +201,7 @@ export default function UsersPage() {
                         placeholder="Nombre completo"
                         value={newUser.name}
                         onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                        disabled={loading}
                       />
                     </div>
                     <div className="space-y-2">
@@ -196,6 +212,7 @@ export default function UsersPage() {
                         placeholder="correo@ejemplo.com"
                         value={newUser.email}
                         onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                        disabled={loading}
                       />
                     </div>
                     <div className="space-y-2">
@@ -206,14 +223,17 @@ export default function UsersPage() {
                         placeholder="••••••••"
                         value={newUser.password}
                         onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                        disabled={loading}
                       />
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={loading}>
                       Cancelar
                     </Button>
-                    <Button onClick={handleCreateUser}>Crear Usuario</Button>
+                    <Button onClick={handleCreateUser} disabled={loading}>
+                      {loading ? "Creando..." : "Crear Usuario"}
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -228,6 +248,7 @@ export default function UsersPage() {
                 className="pl-8"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                disabled={loading}
               />
             </div>
 
