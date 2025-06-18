@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Search, MapPin, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { useCattle } from "@/lib/cattle-context"
+import Fuse from "fuse.js"
 
 // Función para calcular la distancia entre dos puntos (Haversine formula)
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -30,30 +31,40 @@ export default function CattleList() {
   const [radius, setRadius] = useState("")
   const [isLocationSearchActive, setIsLocationSearchActive] = useState(false)
 
-  // Filtrar vacas por término de búsqueda
-  let filteredCattle = cattle.filter(
-    (cow) =>
-      cow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (cow.zoneId &&
-        zones
-          .find((z) => z.id === cow.zoneId)
-          ?.name.toLowerCase()
-          .includes(searchTerm.toLowerCase())),
+  // Configura Fuse.js para búsqueda difusa por nombre y descripción
+  const fuse = useMemo(
+    () =>
+      new Fuse(cattle, {
+        keys: ["name", "description"],
+        threshold: 0.3,
+      }),
+    [cattle],
   )
 
-  // Filtrar por ubicación si la búsqueda avanzada está activa
-  if (isLocationSearchActive && latitude && longitude && radius) {
-    const lat = Number.parseFloat(latitude)
-    const lng = Number.parseFloat(longitude)
-    const rad = Number.parseFloat(radius)
+  // Aplica búsqueda difusa y filtro geoespacial
+  let filteredCattle = useMemo(() => {
+    let result = cattle
 
-    if (!isNaN(lat) && !isNaN(lng) && !isNaN(rad)) {
-      filteredCattle = filteredCattle.filter((cow) => {
-        const distance = calculateDistance(lat, lng, cow.position[0], cow.position[1])
-        return distance <= rad
-      })
+    // Búsqueda difusa si hay término
+    if (searchTerm.trim() !== "") {
+      result = fuse.search(searchTerm).map((r) => r.item)
     }
-  }
+
+    // Filtro geoespacial si está activo
+    if (isLocationSearchActive && latitude && longitude && radius) {
+      const lat = Number.parseFloat(latitude)
+      const lng = Number.parseFloat(longitude)
+      const rad = Number.parseFloat(radius)
+      if (!isNaN(lat) && !isNaN(lng) && !isNaN(rad)) {
+        result = result.filter((cow) => {
+          const distance = calculateDistance(lat, lng, cow.position[0], cow.position[1])
+          return distance <= rad
+        })
+      }
+    }
+
+    return result
+  }, [cattle, fuse, searchTerm, isLocationSearchActive, latitude, longitude, radius])
 
   const handleAdvancedSearch = () => {
     if (latitude && longitude && radius) {
@@ -74,7 +85,7 @@ export default function CattleList() {
         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
         <Input
           type="search"
-          placeholder="Buscar ganado..."
+          placeholder="Buscar nombre, descripción o ->"
           className="pl-8"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -180,7 +191,7 @@ export default function CattleList() {
               className={`flex items-center p-2 rounded-md cursor-pointer transition-colors ${
                 selectedCattleId === cow.id ? "bg-green-50" : "hover:bg-gray-50"
               }`}
-              onClick={() => setSelectedCattleId(cow.id)}
+              onClick={() => setSelectedCattleId(selectedCattleId === cow.id ? null : cow.id)}
             >
               <div className="flex-shrink-0 mr-3">
                 <div className="relative">
