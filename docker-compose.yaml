@@ -21,6 +21,7 @@ services:
 
   # El servicio de la base de datos MongoDB
   mongodb:
+    container_name: mongodb
     image: mongo:latest # Usa la imagen oficial de MongoDB
     ports:
       - "27017:27017"

@@ -1,0 +1,10 @@
+[Unit]
+Description=Backup MongoDB cada 30 segundos
+
+[Timer]
+OnBootSec=15
+OnUnitActiveSec=30
+Unit=backup-mongo.service
+
+[Install]
+WantedBy=timers.target
