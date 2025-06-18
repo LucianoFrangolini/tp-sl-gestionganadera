@@ -1,5 +1,8 @@
 import { MongoClient } from "mongodb"
 
+// URI para el docker compose
+const MONGODB_URI= process.env.MONGODB_URI || "mongodb://mongodb:27017/gestion_ganadera"
+
 // Copia los tipos y datos relevantes de lib/mock-data.ts
 const FARM_CENTER: [number, number] = [40.7128, -74.006]
 const COW_NAMES = [
@@ -113,7 +116,7 @@ function generateCattle() {
 }
 
 async function main() {
-  const uri = "mongodb://localhost:27017"
+  const uri = MONGODB_URI
   const client = new MongoClient(uri)
   try {
     await client.connect()

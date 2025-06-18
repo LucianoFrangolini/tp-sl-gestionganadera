@@ -1,5 +1,8 @@
 import { MongoClient } from "mongodb"
 
+// URI para el docker compose
+const MONGODB_URI= process.env.MONGODB_URI || "mongodb://mongodb:27017/gestion_ganadera"
+
 // Centro de la granja (coordenadas de ejemplo)
 const FARM_CENTER: [number, number] = [40.7128, -74.006]
 
@@ -94,7 +97,7 @@ function generateMockZones() {
 }
 
 async function main() {
-  const uri = "mongodb://localhost:27017"
+  const uri = MONGODB_URI
   const client = new MongoClient(uri)
   try {
     await client.connect()

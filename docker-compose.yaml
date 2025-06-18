@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # El servicio de tu aplicación
+  app:
+    build: . # Asume que tienes un Dockerfile en la raíz del proyecto
+    ports:
+      - "3000:3000" # Expone el puerto de tu app
+    depends_on:
+      - mongodb # Se asegura que la base de datos inicie primero
+    environment:
+      # Pasas la URL de conexión a tu aplicación como variable de entorno
+      MONGODB_URI: mongodb://mongodb:27017/gestion_ganadera
+    command: >
+      sh -c "
+        pnpm tsx seed-users.ts &&
+        pnpm tsx seed-cattle.ts &&
+        pnpm tsx seed-zones.ts &&
+        pnpm start
+      "
+
+  # El servicio de la base de datos MongoDB
+  mongodb:
+    image: mongo:latest # Usa la imagen oficial de MongoDB
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db # Persiste los datos de la base de datos
+
+volumes:
+  mongo-data:
