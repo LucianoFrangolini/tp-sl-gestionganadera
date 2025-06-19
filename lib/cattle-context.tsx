@@ -27,6 +27,11 @@ export interface Zone {
   color: string
 }
 
+interface GeoSearch {
+  center: [number, number] // lat, lng
+  radius: number // in km
+}
+
 interface CattleContextType {
   cattle: Cattle[]
   zones: Zone[]
@@ -36,6 +41,8 @@ interface CattleContextType {
   setSelectedCattleId: (id: string | null) => void
   selectedZoneId: string | null
   setSelectedZoneId: (id: string | null) => void
+  geoSearch: GeoSearch | null
+  setGeoSearch: (search: GeoSearch | null) => void
 }
 
 const CattleContext = createContext<CattleContextType | undefined>(undefined)
@@ -46,6 +53,7 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [selectedCattleId, setSelectedCattleId] = useState<string | null>(null)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
+  const [geoSearch, setGeoSearch] = useState<GeoSearch | null>(null)
   const { toast } = useToast()
   const { isAuthenticated } = useAuth()
 
@@ -241,6 +249,8 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
         setSelectedCattleId,
         selectedZoneId,
         setSelectedZoneId,
+        geoSearch,
+        setGeoSearch,
       }}
     >
       {children}

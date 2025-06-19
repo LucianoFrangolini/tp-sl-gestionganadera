@@ -1,12 +1,9 @@
 #!/bin/sh
-
 # filepath: entrypoint.sh
-
 # Variables
 MONGO_HOST="mongodb"
 MONGO_PORT="27017"
 MONGO_DB="gestion_ganadera"
-
 # Esperar a que MongoDB esté listo
 echo "Esperando a que MongoDB esté disponible..."
 until nc -z "$MONGO_HOST" "$MONGO_PORT"; do

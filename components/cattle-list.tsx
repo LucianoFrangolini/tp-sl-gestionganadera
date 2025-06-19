@@ -29,7 +29,7 @@ async function fetchCattleByGeo(lat: number, lng: number, radius: number) {
 }
 
 export default function CattleList() {
-  const { cattle, zones, selectedCattleId, setSelectedCattleId } = useCattle()
+  const { cattle, zones, selectedCattleId, setSelectedCattleId, setGeoSearch } = useCattle()
   const [searchTerm, setSearchTerm] = useState("")
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false)
   const [latitude, setLatitude] = useState("")
@@ -61,6 +61,7 @@ export default function CattleList() {
         const data = await res.json()
         setFilteredCattle(data.data) // o setFilteredCattle(data) según tu API
         setIsLocationSearchActive(true)
+        setGeoSearch({ center: [lat, lng], radius: rad })
       }
     } catch (e) {
       // Manejo de error
@@ -73,6 +74,7 @@ export default function CattleList() {
   const clearGeoSearch = () => {
     setFilteredCattle(null)
     setIsLocationSearchActive(false)
+    setGeoSearch(null)
   }
 
   // useMemo solo para búsqueda por texto
