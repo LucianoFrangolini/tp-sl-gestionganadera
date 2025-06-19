@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Search, MapPin, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -29,7 +29,8 @@ async function fetchCattleByGeo(lat: number, lng: number, radius: number) {
 }
 
 export default function CattleList() {
-  const { cattle, zones, selectedCattleId, setSelectedCattleId, setGeoSearch } = useCattle()
+  const { cattle, zones, selectedCattleId, setSelectedCattleId, setGeoSearch, searchTrigger, setSearchTrigger } =
+    useCattle()
   const [searchTerm, setSearchTerm] = useState("")
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false)
   const [latitude, setLatitude] = useState("")
@@ -38,6 +39,17 @@ export default function CattleList() {
   const [filteredCattle, setFilteredCattle] = useState<Cattle[] | null>(null)
   const [isLocationSearchActive, setIsLocationSearchActive] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+
+  // Effect to handle search trigger from map
+  useEffect(() => {
+    if (searchTrigger) {
+      setShowAdvancedSearch(true)
+      setLatitude(searchTrigger.lat.toString())
+      setLongitude(searchTrigger.lng.toString())
+      setRadius("1.5")
+      setSearchTrigger(null) // Reset the trigger
+    }
+  }, [searchTrigger, setSearchTrigger])
 
   // Configura Fuse.js para búsqueda difusa por nombre y descripción
   const fuse = useMemo(

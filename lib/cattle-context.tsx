@@ -43,6 +43,9 @@ interface CattleContextType {
   setSelectedZoneId: (id: string | null) => void
   geoSearch: GeoSearch | null
   setGeoSearch: (search: GeoSearch | null) => void
+  // Coordenadas para iniciar una búsqueda desde el mapa
+  searchTrigger: { lat: number; lng: number } | null
+  setSearchTrigger: (coords: { lat: number; lng: number } | null) => void
 }
 
 const CattleContext = createContext<CattleContextType | undefined>(undefined)
@@ -54,6 +57,7 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
   const [selectedCattleId, setSelectedCattleId] = useState<string | null>(null)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
   const [geoSearch, setGeoSearch] = useState<GeoSearch | null>(null)
+  const [searchTrigger, setSearchTrigger] = useState<{ lat: number; lng: number } | null>(null)
   const { toast } = useToast()
   const { isAuthenticated } = useAuth()
 
@@ -251,6 +255,8 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
         setSelectedZoneId,
         geoSearch,
         setGeoSearch,
+        searchTrigger,
+        setSearchTrigger,
       }}
     >
       {children}
