@@ -5,7 +5,7 @@ import { getDb } from "@/lib/mongodb"
  * GET /api/zones
  * Obtiene la lista de zonas
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const db = await getDb()
     const zones = await db.collection("zones").find().toArray()

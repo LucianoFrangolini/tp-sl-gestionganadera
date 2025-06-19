@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { useCattle } from "@/lib/cattle-context"
+import { useCattle, getCowLatLng } from "@/lib/cattle-context"
 import Fuse from "fuse.js"
 
 // Función para calcular la distancia entre dos puntos (Haversine formula)
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+/*function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371 // Radio de la Tierra en km
   const dLat = ((lat2 - lat1) * Math.PI) / 180
   const dLon = ((lon2 - lon1) * Math.PI) / 180
@@ -20,6 +20,12 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return R * c // Distancia en km
+}*/
+
+async function fetchCattleByGeo(lat: number, lng: number, radius: number) {
+  const res = await fetch(`/api/cattle?lat=${lat}&lng=${lng}&radius=${radius}`)
+  if (!res.ok) throw new Error("Error al buscar vacas por ubicación")
+  return await res.json()
 }
 
 export default function CattleList() {
@@ -29,7 +35,9 @@ export default function CattleList() {
   const [latitude, setLatitude] = useState("")
   const [longitude, setLongitude] = useState("")
   const [radius, setRadius] = useState("")
+  const [filteredCattle, setFilteredCattle] = useState<Cattle[] | null>(null)
   const [isLocationSearchActive, setIsLocationSearchActive] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   // Configura Fuse.js para búsqueda difusa por nombre y descripción
   const fuse = useMemo(
@@ -41,43 +49,43 @@ export default function CattleList() {
     [cattle],
   )
 
-  // Aplica búsqueda difusa y filtro geoespacial
-  let filteredCattle = useMemo(() => {
-    let result = cattle
-
-    // Búsqueda difusa si hay término
-    if (searchTerm.trim() !== "") {
-      result = fuse.search(searchTerm).map((r) => r.item)
-    }
-
-    // Filtro geoespacial si está activo
-    if (isLocationSearchActive && latitude && longitude && radius) {
+  // Handler para búsqueda avanzada
+  const handleGeoSearch = async () => {
+    setIsLoading(true)
+    try {
       const lat = Number.parseFloat(latitude)
       const lng = Number.parseFloat(longitude)
       const rad = Number.parseFloat(radius)
       if (!isNaN(lat) && !isNaN(lng) && !isNaN(rad)) {
-        result = result.filter((cow) => {
-          const distance = calculateDistance(lat, lng, cow.position[0], cow.position[1])
-          return distance <= rad
-        })
+        const res = await fetch(`/api/cattle?lat=${lat}&lng=${lng}&radius=${rad}`)
+        const data = await res.json()
+        setFilteredCattle(data.data) // o setFilteredCattle(data) según tu API
+        setIsLocationSearchActive(true)
       }
-    }
-
-    return result
-  }, [cattle, fuse, searchTerm, isLocationSearchActive, latitude, longitude, radius])
-
-  const handleAdvancedSearch = () => {
-    if (latitude && longitude && radius) {
-      setIsLocationSearchActive(true)
+    } catch (e) {
+      // Manejo de error
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const clearAdvancedSearch = () => {
-    setLatitude("")
-    setLongitude("")
-    setRadius("")
+  // Para limpiar la búsqueda avanzada
+  const clearGeoSearch = () => {
+    setFilteredCattle(null)
     setIsLocationSearchActive(false)
   }
+
+  // useMemo solo para búsqueda por texto
+  const fuzzyCattle = useMemo(() => {
+    let result = cattle
+    if (searchTerm.trim() !== "") {
+      result = fuse.search(searchTerm).map((r) => r.item)
+    }
+    return result
+  }, [cattle, fuse, searchTerm])
+
+  // Decide qué mostrar
+  const cattleToShow = isLocationSearchActive && filteredCattle !== null ? filteredCattle : fuzzyCattle
 
   return (
     <div className="space-y-4">
@@ -157,12 +165,12 @@ export default function CattleList() {
             <Button
               size="sm"
               className="w-full"
-              onClick={handleAdvancedSearch}
+              onClick={handleGeoSearch}
               disabled={!latitude || !longitude || !radius}
             >
               Buscar
             </Button>
-            <Button size="sm" variant="outline" className="w-full" onClick={clearAdvancedSearch}>
+            <Button size="sm" variant="outline" className="w-full" onClick={clearGeoSearch}>
               Limpiar
             </Button>
           </div>
@@ -172,7 +180,7 @@ export default function CattleList() {
       {isLocationSearchActive && (
         <div className="flex items-center justify-between bg-green-50 p-2 rounded-md">
           <span className="text-xs text-green-700">Mostrando ganado en un radio de {radius} km</span>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={clearAdvancedSearch}>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={clearGeoSearch}>
             <X className="h-4 w-4" />
             <span className="sr-only">Limpiar filtro</span>
           </Button>
@@ -182,10 +190,11 @@ export default function CattleList() {
       <Separator />
 
       <div className="space-y-1">
-        {filteredCattle.length === 0 ? (
+        {Array.isArray(cattleToShow) && cattleToShow.length === 0 ? (
           <p className="text-center text-gray-500 py-4">No se encontraron resultados</p>
         ) : (
-          filteredCattle.map((cow) => (
+          Array.isArray(cattleToShow) &&
+          cattleToShow.map((cow) => (
             <div
               key={cow.id}
               className={`flex items-center p-2 rounded-md cursor-pointer transition-colors ${
@@ -210,10 +219,10 @@ export default function CattleList() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{cow.name}</p>
                 <p className="text-xs text-gray-500 truncate">
-                  {cow.zoneId ? (
+                  {cow.zoneId && cow.zoneId !== "farm" ? (
                     <span>Zona: {zones.find((z) => z.id === cow.zoneId)?.name || "Desconocida"}</span>
                   ) : (
-                    <span className="text-yellow-600">Sin zona</span>
+                    <span className="text-yellow-600">Zona: Granja completa</span>
                   )}
                 </p>
               </div>

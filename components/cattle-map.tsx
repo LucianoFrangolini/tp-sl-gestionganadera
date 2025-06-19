@@ -1,10 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMap, useMapEvent, Circle } from "react-leaflet"
+import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMap, useMapEvent, Circle, Polygon } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
-import { useCattle, type Cattle } from "@/lib/cattle-context"
+import { useCattle, getCowLatLng } from "@/lib/cattle-context"
 
 // Icono personalizado para las vacas
 const cowIcon = new L.Icon({
@@ -22,7 +22,7 @@ function MapUpdater({ cattle, selectedCattleId }: { cattle: Cattle[]; selectedCa
     if (selectedCattleId) {
       const selectedCow = cattle.find((cow) => cow.id === selectedCattleId)
       if (selectedCow) {
-        map.setView(selectedCow.position, 16)
+        map.setView(getCowLatLng(selectedCow), 16)
       }
     }
     setTimeout(() => map.invalidateSize(), 300)
@@ -98,31 +98,30 @@ export default function CattleMap() {
         />
       )}
 
-      {/* Renderizar zonas (sin cambios) */}
-      {zones.map((zone) => (
-        <Rectangle
-          key={zone.id}
-          bounds={zone.bounds as L.LatLngBoundsExpression}
-          pathOptions={{
-            color: zone.color,
-            weight: 2,
-            fillOpacity: selectedZoneId === zone.id ? 0.3 : 0.1,
-          }}
-        >
-          <Popup>
-            <div>
-              <h3 className="font-semibold">{zone.name}</h3>
-              <p>{zone.description}</p>
-            </div>
-          </Popup>
-        </Rectangle>
-      ))}
+      {/* Renderizar zonas como polígonos */}
+      {Array.isArray(zones) &&
+        zones.map((zone) => {
+          return Array.isArray(zone.bounds?.coordinates?.[0]) ? (
+            <Polygon
+              key={zone.id}
+              positions={zone.bounds.coordinates[0].map(([lng, lat]) => [lat, lng])}
+              pathOptions={{ color: zone.color, fillOpacity: selectedZoneId === zone.id ? 0.3 : 0.1 }}
+            >
+              <Popup>
+                <div>
+                  <h3 className="font-semibold">{zone.name}</h3>
+                  <p>{zone.description}</p>
+                </div>
+              </Popup>
+            </Polygon>
+          ) : null;
+        })}
 
       {/* Renderizar vacas (sin cambios) */}
       {cattle.map((cow) => (
         <Marker
           key={cow.id}
-          position={cow.position}
+          position={getCowLatLng(cow)}
           icon={cowIcon}
           opacity={cow.connected ? 1 : 0.5}
           eventHandlers={{

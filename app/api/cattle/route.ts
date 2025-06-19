@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { MongoClient } from "mongodb"
 import { getDb } from "@/lib/mongodb"
+
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://mongodb:27017/gestion_ganadera"
 
 // Sanitizador simple para strings
 function sanitizeString(str: string, maxLen = 100) {
@@ -12,6 +14,7 @@ function sanitizeString(str: string, maxLen = 100) {
  * Permite filtrar por término, zona, estado de conexión y búsqueda geoespacial
  */
 export async function GET(request: NextRequest) {
+
   try {
     const db = await getDb()
     const cattleCollection = db.collection("cattle")
@@ -84,5 +87,28 @@ export async function GET(request: NextRequest) {
       },
       { status: 500 },
     )
+  }
+}
+
+/**
+ * POST /api/cattle
+ * Actualiza la posición de un ganado por su ID
+ */
+export async function POST(request: NextRequest) {
+  const { id, lat, lng } = await request.json()
+  const client = new MongoClient(MONGODB_URI)
+  try {
+    await client.connect()
+    const db = client.db("gestion_ganadera")
+    const collection = db.collection("cattle")
+    await collection.updateOne(
+      { id },
+      { $set: { position: { type: "Point", coordinates: [lng, lat] } } }
+    )
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  } finally {
+    await client.close()
   }
 }

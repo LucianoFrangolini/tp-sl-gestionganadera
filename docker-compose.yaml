@@ -11,13 +11,6 @@ services:
     environment:
       # Pasas la URL de conexión a tu aplicación como variable de entorno
       MONGODB_URI: mongodb://mongodb:27017/gestion_ganadera
-    command: >
-      sh -c "
-        pnpm tsx seed-users.ts &&
-        pnpm tsx seed-cattle.ts &&
-        pnpm tsx seed-zones.ts &&
-        pnpm start
-      "
 
   # El servicio de la base de datos MongoDB
   mongodb:
@@ -27,6 +20,7 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db # Persiste los datos de la base de datos
+    command: ["mongod", "--quiet"]
 
 volumes:
   mongo-data:

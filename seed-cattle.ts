@@ -107,7 +107,7 @@ function generateCattle() {
       name: COW_NAMES[i % COW_NAMES.length],
       description: COW_DESCRIPTIONS[i % COW_DESCRIPTIONS.length],
       imageUrl: COW_IMAGES[i % COW_IMAGES.length],
-      position: [lat, lng],
+      position: { type: "Point", coordinates: [lng, lat] }, // GeoJSON
       connected: Math.random() > 0.1,
       zoneId,
     })
@@ -125,10 +125,13 @@ async function main() {
     const cattle = generateCattle()
     await collection.deleteMany({})
     await collection.insertMany(cattle)
-    console.log("Colección 'cattle' poblada con éxito.")
+    // Crear índice 2dsphere para búsquedas geoespaciales
+    await collection.createIndex({ position: "2dsphere" })
+    console.log("Colección 'cattle' poblada y con índice 2dsphere.")
   } finally {
     await client.close()
   }
 }
+
 
 main().catch(console.error)
