@@ -3,6 +3,7 @@
 /etc/systemd/system/backup-mongo.timer
 /etc/systemd/system/backup-mongo.service
 /usr/local/bin/backup-mongo.sh
+sudo mkdir /etc/backup-mongo
 /etc/backup-mongo/config.conf
 ```
 

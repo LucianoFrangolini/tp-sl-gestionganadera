@@ -15,12 +15,9 @@ echo "MongoDB está disponible."
 # Verificar si la colección 'users' tiene datos
 EXISTING_USERS=$(node ./check-db.js)
 if [ "$EXISTING_USERS" -gt 0 ]; then
-  echo "La base de datos ya tiene datos. No se ejecutarán los seeds."
+  echo "La base de datos ya tiene datos."
 else
-  echo "La base de datos está vacía. Ejecutando seeds..."
-  pnpm tsx seed-users.ts
-  pnpm tsx seed-zones.ts
-  pnpm tsx seed-cattle.ts
+  echo "La base de datos está vacía. Ejecutar restore"
 fi
 
 # Iniciar la aplicación normalmente
