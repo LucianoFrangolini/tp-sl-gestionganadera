@@ -11,7 +11,7 @@ export interface Cattle {
   name: string
   description: string
   imageUrl: string
-  position: [number, number]
+  position: { type: "Point"; coordinates: [number, number] } // GeoJSON
   connected: boolean
   zoneId: string | null
 }
@@ -20,8 +20,16 @@ export interface Zone {
   id: string
   name: string
   description: string
-  bounds: [[number, number], [number, number]] // [[lat1, lng1], [lat2, lng2]]
+  bounds: {
+    type: "Polygon"
+    coordinates: [[[[number, number], [number, number], [number, number], [number, number], [number, number]]]]
+  } // GeoJSON
   color: string
+}
+
+interface GeoSearch {
+  center: [number, number] // lat, lng
+  radius: number // in km
 }
 
 interface CattleContextType {
@@ -33,6 +41,11 @@ interface CattleContextType {
   setSelectedCattleId: (id: string | null) => void
   selectedZoneId: string | null
   setSelectedZoneId: (id: string | null) => void
+  geoSearch: GeoSearch | null
+  setGeoSearch: (search: GeoSearch | null) => void
+  // Coordenadas para iniciar una búsqueda desde el mapa
+  searchTrigger: { lat: number; lng: number } | null
+  setSearchTrigger: (coords: { lat: number; lng: number } | null) => void
 }
 
 const CattleContext = createContext<CattleContextType | undefined>(undefined)
@@ -43,6 +56,8 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [selectedCattleId, setSelectedCattleId] = useState<string | null>(null)
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
+  const [geoSearch, setGeoSearch] = useState<GeoSearch | null>(null)
+  const [searchTrigger, setSearchTrigger] = useState<{ lat: number; lng: number } | null>(null)
   const { toast } = useToast()
   const { isAuthenticated } = useAuth()
 
@@ -77,6 +92,23 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
     audio.play().catch((e) => console.log("Error reproduciendo audio:", e))
   }, [isAuthenticated])
 
+  // Función para actualizar la posición de una vaca en la base de datos
+  async function updateCowPositionInDb(id: string, lat: number, lng: number) {
+    try {
+      const res = await fetch("/api/cattle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, lat, lng }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Error actualizando posición en la base de datos")
+      }
+    } catch (e) {
+      console.error("Error actualizando posición en la base de datos:", e)
+    }
+  }
+
   // Simular movimiento de vacas solo si el usuario está autenticado
   useEffect(() => {
     if (loading || !isAuthenticated || zones.length === 0) return
@@ -89,40 +121,51 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
 
           // Obtener los límites de la granja (primera zona)
           const farmZone = zones[0]
-          const [[minLat, minLng], [maxLat, maxLng]] = farmZone.bounds
+          const { minLat, maxLat, minLng, maxLng } = getBoundsFromPolygon(farmZone.bounds)
 
           // Movimiento aleatorio pequeño
           const latChange = (Math.random() - 0.5) * 0.001
           const lngChange = (Math.random() - 0.5) * 0.001
 
-          // Calcular nueva posición
-          let newLat = cow.position[0] + latChange
-          let newLng = cow.position[1] + lngChange
+          // Calcular nueva posición (GeoJSON: [lng, lat])
+          let newLng = cow.position.coordinates[0] + lngChange
+          let newLat = cow.position.coordinates[1] + latChange
 
           // Verificar si la nueva posición estaría fuera de la granja
           const wouldBeOutside = newLat < minLat || newLat > maxLat || newLng < minLng || newLng > maxLng
 
-          // Si estaría fuera, hay una pequeña probabilidad (0.5%) de permitirlo para simular escape
-          // De lo contrario, ajustamos la posición para mantenerla dentro de los límites
+          // Si estaría fuera, ajustamos la posición para mantenerla dentro de los límites
           if (wouldBeOutside && Math.random() > 0.005) {
-            // Ajustar la posición para mantenerla dentro de los límites
             newLat = Math.max(minLat, Math.min(maxLat, newLat))
             newLng = Math.max(minLng, Math.min(maxLng, newLng))
           }
 
-          const newPosition: [number, number] = [newLat, newLng]
+          const newPosition = {
+            type: "Point",
+            coordinates: [newLng, newLat], // GeoJSON: [lng, lat]
+          }
 
-          // Determinar en qué zona está
+          // Ordena las zonas para que "farm" sea la última
+          const orderedZones = [
+            ...zones.filter((z) => z.id !== "farm"),
+            ...zones.filter((z) => z.id === "farm"),
+          ]
+
           let newZoneId: string | null = null
 
-          for (const zone of zones) {
-            const [[zMinLat, zMinLng], [zMaxLat, zMaxLng]] = zone.bounds
+          for (const zone of orderedZones) {
+            const {
+              minLat: zMinLat,
+              maxLat: zMaxLat,
+              minLng: zMinLng,
+              maxLng: zMaxLng,
+            } = getBoundsFromPolygon(zone.bounds)
 
             if (
-              newPosition[0] >= zMinLat &&
-              newPosition[0] <= zMaxLat &&
-              newPosition[1] >= zMinLng &&
-              newPosition[1] <= zMaxLng
+              newPosition.coordinates[1] >= zMinLat &&
+              newPosition.coordinates[1] <= zMaxLat &&
+              newPosition.coordinates[0] >= zMinLng &&
+              newPosition.coordinates[0] <= zMaxLng
             ) {
               newZoneId = zone.id
               break
@@ -131,7 +174,10 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
 
           // Verificar si salió de la zona general (primera zona)
           const isOutside =
-            newPosition[0] < minLat || newPosition[0] > maxLat || newPosition[1] < minLng || newPosition[1] > maxLng
+            newPosition.coordinates[1] < minLat ||
+            newPosition.coordinates[1] > maxLat ||
+            newPosition.coordinates[0] < minLng ||
+            newPosition.coordinates[0] > maxLng
 
           if (isOutside) {
             // Alerta: vaca fuera de la granja
@@ -155,6 +201,9 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
               })
             }
           }
+
+          // Después de calcular newLat y newLng:
+          updateCowPositionInDb(cow.id, newLat, newLng) // <-- sigue igual, porque la API espera lat, lng
 
           return {
             ...cow,
@@ -204,6 +253,10 @@ export function CattleProvider({ children }: { children: React.ReactNode }) {
         setSelectedCattleId,
         selectedZoneId,
         setSelectedZoneId,
+        geoSearch,
+        setGeoSearch,
+        searchTrigger,
+        setSearchTrigger,
       }}
     >
       {children}
@@ -217,4 +270,29 @@ export function useCattle() {
     throw new Error("useCattle must be used within a CattleProvider")
   }
   return context
+}
+
+// Utilidad para obtener lat/lng de una vaca
+export function getCowLatLng(cow: Cattle): [number, number] {
+  // GeoJSON: [lng, lat]
+  return [cow.position.coordinates[1], cow.position.coordinates[0]]
+}
+
+// Función para obtener los límites (minLat, maxLat, minLng, maxLng) de un polígono GeoJSON
+function getBoundsFromPolygon(polygon: any): { minLat: number; maxLat: number; minLng: number; maxLng: number } {
+  const coords = polygon.coordinates[0]
+  let minLat = coords[0][1]
+  let maxLat = coords[0][1]
+  let minLng = coords[0][0]
+  let maxLng = coords[0][0]
+
+  for (const coord of coords) {
+    const [lng, lat] = coord
+    minLat = Math.min(minLat, lat)
+    maxLat = Math.max(maxLat, lat)
+    minLng = Math.min(minLng, lng)
+    maxLng = Math.max(maxLng, lng)
+  }
+
+  return { minLat, maxLat, minLng, maxLng }
 }

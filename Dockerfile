@@ -16,11 +16,14 @@ RUN pnpm install --frozen-lockfile
 # Copia el resto del código fuente
 COPY . .
 
+# Da permisos de ejecución al entrypoint
+RUN chmod +x ./entrypoint.sh
+
 # Construye la aplicación Next.js
 RUN pnpm build
 
 # Expone el puerto en el que Next.js corre por defecto
 EXPOSE 3000
 
-# Comando por defecto para iniciar la app
-CMD ["pnpm", "start"]
+# Usa el entrypoint personalizado
+ENTRYPOINT ["sh", "./entrypoint.sh"]

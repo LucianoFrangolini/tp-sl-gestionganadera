@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMap } from "react-leaflet"
-import L from "leaflet"
+import { useEffect, useState, useRef } from "react"
+import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMap, useMapEvent, Circle, Polygon } from "react-leaflet"
+import L, { LeafletMouseEvent } from "leaflet"
 import "leaflet/dist/leaflet.css"
-import { useCattle, type Cattle } from "@/lib/cattle-context"
+import { useCattle, getCowLatLng, Zone } from "@/lib/cattle-context"
+import { Button } from "./ui/button"
 
 // Icono personalizado para las vacas
 const cowIcon = new L.Icon({
@@ -22,24 +23,67 @@ function MapUpdater({ cattle, selectedCattleId }: { cattle: Cattle[]; selectedCa
     if (selectedCattleId) {
       const selectedCow = cattle.find((cow) => cow.id === selectedCattleId)
       if (selectedCow) {
-        map.setView(selectedCow.position, 16)
+        map.setView(getCowLatLng(selectedCow), 16)
       }
     }
-
-    // Invalidar tamaño del mapa para asegurar que se renderice correctamente
-    setTimeout(() => {
-      map.invalidateSize()
-    }, 300)
+    setTimeout(() => map.invalidateSize(), 300)
   }, [map, cattle, selectedCattleId])
 
   return null
 }
 
-export default function CattleMap() {
-  const { cattle, zones, selectedCattleId, setSelectedCattleId, selectedZoneId } = useCattle()
-  const [mapReady, setMapReady] = useState(false)
+// Componente para mostrar popup de coordenadas al hacer click
+function ClickPopup({ position, onClose }: { position: [number, number] | null; onClose: () => void }) {
+  const { setSearchTrigger } = useCattle()
+  const divRef = useRef<HTMLDivElement>(null)
 
-  // Asegurarse de que el componente de mapa se cargue solo en el cliente
+  useEffect(() => {
+    if (divRef.current) {
+      L.DomEvent.disableClickPropagation(divRef.current)
+    }
+  }, [])
+
+  if (!position) return null
+  return (
+    <Popup position={position} eventHandlers={{ remove: onClose }}>
+      <div ref={divRef}>
+        <strong>Coordenadas</strong>
+        <div>
+          Lat: {position[0].toFixed(6)}
+          <br />
+          Lng: {position[1].toFixed(6)}
+        </div>
+        <Button
+          size="sm"
+          className="mt-2 w-full"
+          onClick={(e) => {
+            e.stopPropagation() // Evita que se dispare el evento de click del mapa
+            setSearchTrigger({ lat: position[0], lng: position[1] })
+            onClose() // Cierra el popup
+          }}
+        >
+          Buscar aquí
+        </Button>
+      </div>
+    </Popup>
+  )
+}
+
+export default function CattleMap() {
+  const { cattle, zones, selectedCattleId, setSelectedCattleId, selectedZoneId, geoSearch } = useCattle()
+  const [mapReady, setMapReady] = useState(false)
+  const [clickedPosition, setClickedPosition] = useState<[number, number] | null>(null)
+  const [zonePopupData, setZonePopupData] = useState<{ position: [number, number]; zone: Zone } | null>(null)
+
+  function MapClickHandler() {
+    useMapEvent("click", (e: LeafletMouseEvent) => {
+      setClickedPosition([e.latlng.lat, e.latlng.lng])
+      setSelectedCattleId(null)
+      setZonePopupData(null) // Cierra el popup de la zona si se hace clic en el mapa
+    })
+    return null
+  }
+
   useEffect(() => {
     setMapReady(true)
   }, [])
@@ -50,71 +94,85 @@ export default function CattleMap() {
 
   return (
     <MapContainer
-      center={[40.7128, -74.006]} // Coordenadas iniciales
+      center={[40.7128, -74.006]}
       zoom={14}
       style={{ height: "100%", width: "100%" }}
-      className="z-0" // Asegurar que el mapa tenga un z-index bajo
+      className="z-0"
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      {/* Renderizar zonas */}
-      {zones.map((zone) => (
-        <Rectangle
-          key={zone.id}
-          bounds={zone.bounds as L.LatLngBoundsExpression}
-          pathOptions={{
-            color: zone.color,
-            weight: 2,
-            fillOpacity: selectedZoneId === zone.id ? 0.3 : 0.1,
-          }}
-        >
-          <Popup>
-            <div>
-              <h3 className="font-semibold">{zone.name}</h3>
-              <p>{zone.description}</p>
-            </div>
-          </Popup>
-        </Rectangle>
-      ))}
+      <MapClickHandler />
+      <ClickPopup position={clickedPosition} onClose={() => setClickedPosition(null)} />
 
-      {/* Renderizar vacas */}
+      {/* Dibuja el círculo de búsqueda geoespacial si está activo */}
+      {geoSearch && (
+        <Circle
+          center={geoSearch.center}
+          radius={geoSearch.radius * 1000} // Convertir km a metros
+          pathOptions={{
+            color: "black",
+            weight: 1,
+            fillColor: "lightgray",
+            fillOpacity: 0.3,
+          }}
+        />
+      )}
+
+      {/* Popup para la zona clickeada */}
+      {zonePopupData && (
+        <Popup position={zonePopupData.position} eventHandlers={{ remove: () => setZonePopupData(null) }}>
+          <div>
+            <h3 className="font-semibold">{zonePopupData.zone.name}</h3>
+            <p className="text-sm">{zonePopupData.zone.description}</p>
+            <hr className="my-1" />
+            <div className="text-xs">
+              <strong>Lat:</strong> {zonePopupData.position[0].toFixed(6)}
+              <br />
+              <strong>Lng:</strong> {zonePopupData.position[1].toFixed(6)}
+            </div>
+          </div>
+        </Popup>
+      )}
+
+      {/* Renderizar zonas como polígonos */}
+      {Array.isArray(zones) &&
+        zones.map((zone) => {
+          return Array.isArray(zone.bounds?.coordinates?.[0]) ? (
+            <Polygon
+              key={zone.id}
+              positions={zone.bounds.coordinates[0].map(([lng, lat]) => [lat, lng])}
+              pathOptions={{ color: zone.color, fillOpacity: selectedZoneId === zone.id ? 0.3 : 0.1 }}
+              eventHandlers={{
+                click: (e: LeafletMouseEvent) => {
+                  L.DomEvent.stopPropagation(e) // Evita que se dispare el click del mapa
+                  setZonePopupData({ position: [e.latlng.lat, e.latlng.lng], zone })
+                },
+              }}
+            />
+          ) : null
+        })}
+
+      {/* Renderizar vacas (sin cambios) */}
       {cattle.map((cow) => (
         <Marker
           key={cow.id}
-          position={cow.position}
+          position={getCowLatLng(cow)}
           icon={cowIcon}
           opacity={cow.connected ? 1 : 0.5}
           eventHandlers={{
-            click: () => {
-              setSelectedCattleId(cow.id)
+            click: (e: LeafletMouseEvent) => {
+              L.DomEvent.stopPropagation(e)
+              setSelectedCattleId(selectedCattleId === cow.id ? null : cow.id)
             },
           }}
         >
           <Popup>
             <div className="text-center">
               <h3 className="font-semibold">{cow.name}</h3>
-              <div className="my-2">
-                <img
-                  src={cow.imageUrl || "/placeholder.svg"}
-                  alt={cow.name}
-                  className="w-16 h-16 mx-auto rounded-full object-cover"
-                />
-              </div>
               <p className="text-sm">{cow.description}</p>
-              <p className="text-xs mt-2">
-                Estado:{" "}
-                {cow.connected ? (
-                  <span className="text-green-600 font-semibold">Conectada</span>
-                ) : (
-                  <span className="text-red-600 font-semibold">Desconectada</span>
-                )}
-              </p>
-              {cow.zoneId && (
-                <p className="text-xs">Zona: {zones.find((z) => z.id === cow.zoneId)?.name || "Desconocida"}</p>
-              )}
             </div>
           </Popup>
         </Marker>

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
  * GET /api/dashboard
  * Obtiene los datos para el dashboard
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // Simulación de datos para el dashboard
     const dashboardData = {
